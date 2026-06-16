@@ -29,11 +29,19 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# --- NUEVAS LÍNEAS: Crea las carpetas si no existen en el servidor ---
-os.makedirs("static/uploads", exist_ok=True)
+# --- CORRECCIÓN: Rutas absolutas ---
+# 1. Obtenemos la ruta exacta de la carpeta donde está tu main.py
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Mapea la carpeta física 'static' a la dirección web '/static'
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# 2. Armamos la ruta completa y segura hacia 'static/uploads'
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
+
+# 3. Creamos las carpetas usando esa ruta exacta
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+# 4. Montamos FastAPI usando la ruta absoluta
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 # Configuración de encriptación y JWT
