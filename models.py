@@ -78,19 +78,6 @@ class Review(Base):
     provider = relationship("Provider", back_populates="reviews")
 
 
-class Portfolio(Base):
-    __tablename__ = "portfolio"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    provider_id = Column(Integer, ForeignKey("providers.id"))
-    titulo = Column(String)
-    descripcion = Column(Text)
-    imagen = Column(String) # URL donde se guarda la foto
-    fecha = Column(DateTime, default=datetime.datetime.utcnow)
-
-    provider = relationship("Provider", back_populates="portfolio")
-
-
 class JobRequest(Base):
     __tablename__ = "job_requests"
     
