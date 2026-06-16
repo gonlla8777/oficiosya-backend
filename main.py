@@ -33,19 +33,16 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-
-
-
-# ... (acá está tu app = FastAPI() ) ...
-
-# Le abrimos la puerta al frontend
+# --- CONFIGURACIÓN CORS ---
+# Le abrimos la puerta al frontend para que pueda pedir datos
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # El "*" permite que cualquier página consulte tu API (Ideal para el MVP)
+    allow_origins=["*"], # El "*" permite cualquier origen (ideal para desarrollo)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# --------------------------
 
 # --- CONFIGURACIÓN DE RUTAS ABSOLUTAS (Asegura compatibilidad con Render) ---
 # 1. Obtenemos la ruta exacta de la carpeta donde está tu main.py
