@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship
 import datetime
 
 Base = declarative_base()
@@ -46,8 +48,9 @@ class Provider(Base):
     user = relationship("User", back_populates="provider_profile")
     categories = relationship("Category", secondary=provider_categories, back_populates="providers")
     reviews = relationship("Review", back_populates="provider")
-    portfolio = relationship("Portfolio", back_populates="provider")
+    portfolio = relationship("PortfolioItem", back_populates="provider", cascade="all, delete-orphan")
     subscriptions = relationship("Subscription", back_populates="provider")
+    
 
 
 class Category(Base):
@@ -110,3 +113,13 @@ class Subscription(Base):
     fecha_fin = Column(DateTime)
 
     provider = relationship("Provider", back_populates="subscriptions")
+
+class PortfolioItem(Base):
+    __tablename__ = "portfolio_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    provider_id = Column(Integer, ForeignKey("providers.id", ondelete="CASCADE"))
+    url_foto = Column(String, nullable=False)
+
+    # Relación inversa para poder acceder desde el prestador
+    provider = relationship("Provider", back_populates="portfolio")

@@ -18,11 +18,18 @@ import shutil
 import os
 from fastapi.staticfiles import StaticFiles
 import os
-
+import cloudinary
+import cloudinary.uploader
 
 # Cargamos las variables del .env
 load_dotenv()
-
+# --- CONFIGURACIÓN DE CLOUDINARY ---
+cloudinary.config(
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key = os.getenv("CLOUDINARY_API_KEY"),
+    api_secret = os.getenv("CLOUDINARY_API_SECRET"),
+    secure = True
+)
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
 
@@ -355,3 +362,45 @@ def destacar_prestador(
     db.commit()
     
     return {"mensaje": f"Suscripción activada. El prestador {prestador_id} ahora aparecerá primero en las búsquedas."}
+
+@app.post("/prestadores/me/portfolio/", response_model=schemas.PortfolioItemOut)
+def subir_foto_portafolio(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
+):
+    # 1. Verificamos que el usuario logueado realmente tenga un perfil de prestador
+    prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
+    if not prestador:
+        raise HTTPException(status_code=400, detail="Primero debes crear tu perfil de prestador.")
+
+    # 2. Definimos el límite según el tipo de cuenta
+    # Si es destacado (Premium) permitimos 10, si es gratuito solo 2
+    limite_fotos = 10 if prestador.destacado else 2
+
+    # 3. Contamos cuántas fotos ya tiene subidas actualmente
+    fotos_actuales = db.query(models.PortfolioItem).filter(models.PortfolioItem.provider_id == prestador.id).count()
+
+    if fotos_actuales >= limite_fotos:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Alcanzaste el límite de tu plan ({limite_fotos} fotos). Pasate a Premium para subir más."
+        )
+    # 4. Subimos el archivo directamente a Cloudinary
+    try:
+        # Lo guardamos adentro de una carpeta llamada "portfolio" en la nube
+        resultado = cloudinary.uploader.upload(file.file, folder="portfolio")
+        
+        # Cloudinary nos devuelve automáticamente la URL segura (https)
+        url_publica = resultado.get("secure_url")
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al subir la imagen: {e}")
+
+    # 5. Guardamos el registro en la base de datos de Neon
+    nuevo_item = models.PortfolioItem(provider_id=prestador.id, url_foto=url_publica)
+    db.add(nuevo_item)
+    db.commit()
+    db.refresh(nuevo_item)
+
+    return nuevo_item

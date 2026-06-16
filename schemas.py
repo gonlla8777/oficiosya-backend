@@ -93,3 +93,10 @@ class JobRequestOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+class PortfolioItemOut(BaseModel):
+    id = int
+    url_foto = str
+
+    class Config:
+        from_attributes = True
