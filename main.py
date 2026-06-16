@@ -11,6 +11,7 @@ import os
 import shutil
 import cloudinary
 import cloudinary.uploader
+from fastapi.middleware.cors import CORSMiddleware
 
 import models
 import schemas
@@ -31,6 +32,20 @@ cloudinary.config(
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+
+
+
+# ... (acá está tu app = FastAPI() ) ...
+
+# Le abrimos la puerta al frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # El "*" permite que cualquier página consulte tu API (Ideal para el MVP)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- CONFIGURACIÓN DE RUTAS ABSOLUTAS (Asegura compatibilidad con Render) ---
 # 1. Obtenemos la ruta exacta de la carpeta donde está tu main.py
