@@ -27,7 +27,6 @@ load_dotenv()
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- CORRECCIÓN: Rutas absolutas ---
 # 1. Obtenemos la ruta exacta de la carpeta donde está tu main.py
