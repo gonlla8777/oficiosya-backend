@@ -344,3 +344,32 @@ def subir_foto_portafolio(
     db.refresh(nuevo_item)
 
     return nuevo_item
+
+@app.get("/prestadores/detalle/{prestador_id}")
+def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
+    # Buscamos al prestador
+    prestador = db.query(models.Provider).filter(models.Provider.id == prestador_id).first()
+    if not prestador:
+        raise HTTPException(status_code=404, detail="Prestador no encontrado")
+    
+    # Armamos un paquete con toda su información para la vidriera
+    return {
+        "id": prestador.id,
+        "nombre": prestador.user.nombre,
+        "ciudad": prestador.ciudad,
+        "descripcion": prestador.descripcion,
+        "experiencia": prestador.experiencia,
+        "whatsapp": prestador.whatsapp,
+        "verificado": prestador.verificado,
+        "destacado": prestador.destacado,
+        "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories],
+        "portfolio": [{"id": p.id, "url_foto": p.url_foto} for p in prestador.portfolio],
+        "reviews": [
+            {
+                "id": r.id, 
+                "comentario": r.comentario, 
+                "calidad": r.calidad,
+                "fecha": r.created_at.strftime("%d/%m/%Y")
+            } for r in prestador.reviews
+        ]
+    }
