@@ -16,6 +16,9 @@ from fastapi import File, UploadFile
 from fastapi.staticfiles import StaticFiles
 import shutil
 import os
+from fastapi.staticfiles import StaticFiles
+import os
+
 
 # Cargamos las variables del .env
 load_dotenv()
@@ -25,6 +28,13 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# --- NUEVAS LÍNEAS: Crea las carpetas si no existen en el servidor ---
+os.makedirs("static/uploads", exist_ok=True)
+
+# Mapea la carpeta física 'static' a la dirección web '/static'
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 # Configuración de encriptación y JWT
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
