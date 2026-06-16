@@ -1,28 +1,24 @@
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
-import jwt
 from datetime import datetime, timedelta
-import os
-from dotenv import load_dotenv
-from fastapi.security import OAuth2PasswordBearer
-from fastapi import status 
 from typing import List, Optional
-import models
-import schemas
-from database import engine, get_db
-from fastapi import File, UploadFile
-from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
+import jwt
+import os
 import shutil
-import os
-from fastapi.staticfiles import StaticFiles
-import os
 import cloudinary
 import cloudinary.uploader
 
+import models
+import schemas
+from database import engine, get_db
+
 # Cargamos las variables del .env
 load_dotenv()
+
 # --- CONFIGURACIÓN DE CLOUDINARY ---
 cloudinary.config(
     cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -30,12 +26,13 @@ cloudinary.config(
     api_secret = os.getenv("CLOUDINARY_API_SECRET"),
     secure = True
 )
+
 # Crea las tablas si no existen
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# --- CORRECCIÓN: Rutas absolutas ---
+# --- CONFIGURACIÓN DE RUTAS ABSOLUTAS (Asegura compatibilidad con Render) ---
 # 1. Obtenemos la ruta exacta de la carpeta donde está tu main.py
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -43,10 +40,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
 
-# 3. Creamos las carpetas usando esa ruta exacta
+# 3. Creamos las carpetas usando esa ruta exacta antes de montar
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
-# 4. Montamos FastAPI usando la ruta absoluta
+# 4. Montamos FastAPI usando la ruta absoluta segura
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -59,7 +56,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # El token dura 7 días
 # Le indicamos a FastAPI dónde tiene que ir el usuario a buscar su token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-# Esta función actúa como el "patovica" de la puerta
+# Dependencia para obtener el usuario actual mediante el Token
 def obtener_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credenciales_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,7 +64,6 @@ def obtener_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = De
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        # Intentamos decodificar el token con nuestra clave secreta
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
@@ -77,13 +73,12 @@ def obtener_usuario_actual(token: str = Depends(oauth2_scheme), db: Session = De
     except jwt.InvalidTokenError:
         raise credenciales_exception
     
-    # Buscamos al usuario en la base de datos
     user = db.query(models.User).filter(models.User.email == email).first()
     if user is None:
         raise credenciales_exception
     return user
 
-# Función auxiliar para generar el pase VIP (Token)
+# Función auxiliar para generar el token JWT
 def crear_token_acceso(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -111,14 +106,9 @@ def crear_usuario(usuario: schemas.UserCreate, db: Session = Depends(get_db)):
     db.refresh(nuevo_usuario)
     return {"mensaje": "Usuario creado con éxito", "usuario_id": nuevo_usuario.id}
 
-# --- NUEVO ENDPOINT: INICIO DE SESIÓN ---
 @app.post("/login/")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # 1. Buscamos al usuario por su email
-    # (FastAPI usa el campo 'username' por defecto en sus formularios, pero nosotros le pasaremos el email)
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
-    
-    # 2. Verificamos que exista y que la contraseña coincida con la encriptada
     if not user or not pwd_context.verify(form_data.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -126,10 +116,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # 3. Generamos el token con sus datos clave adentro
     access_token = crear_token_acceso(data={"sub": user.email, "id": user.id, "rol": user.rol})
-    
-    # 4. Le entregamos la llave al usuario
     return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/prestadores/")
@@ -138,12 +125,10 @@ def crear_perfil_prestador(
     db: Session = Depends(get_db), 
     usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
-    # Verificamos que no tenga un perfil ya creado
     perfil_existente = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
     if perfil_existente:
         raise HTTPException(status_code=400, detail="Este usuario ya tiene un perfil de prestador")
     
-    # Creamos el perfil
     nuevo_prestador = models.Provider(
         user_id=usuario_actual.id,
         dni=perfil.dni,
@@ -154,11 +139,8 @@ def crear_perfil_prestador(
         whatsapp=perfil.whatsapp
     )
     
-    # Buscamos las categorías que seleccionó y se las asignamos
     categorias = db.query(models.Category).filter(models.Category.id.in_(perfil.categorias_ids)).all()
     nuevo_prestador.categories.extend(categorias)
-    
-    # También le actualizamos el rol al usuario
     usuario_actual.rol = "prestador"
     
     db.add(nuevo_prestador)
@@ -173,7 +155,6 @@ def buscar_prestadores(
     categoria_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    # 1. Filtros base (SQL puro)
     query = db.query(models.Provider)
     if ciudad:
         query = query.filter(models.Provider.ciudad.ilike(f"%{ciudad}%"))
@@ -183,49 +164,31 @@ def buscar_prestadores(
     prestadores = query.all()
     resultados = []
 
-    # 2. El Motor Analítico: Calculamos el score dinámico para cada prestador
     for prestador in prestadores:
-        # Extraemos los datos brutos
         total_resenas = len(prestador.reviews)
         promedio = sum([r.calidad for r in prestador.reviews]) / total_resenas if total_resenas > 0 else 0
 
-        # NORMALIZACIÓN (Escala ideal de 100 puntos máximos)
-        
-        # A. Calificación (40%): 5 estrellas = 40 pts
         pts_calificacion = (promedio / 5.0) * 40
-        
-        # B. Cantidad de Reseñas (20%): Topeamos en 20 reseñas (1 pt por reseña)
         pts_resenas = min(total_resenas, 20)
-        
-        # C. Verificado (15%): Booleano directo
         pts_verificado = 15 if prestador.verificado else 0
-        
-        # D. Actividad Reciente (15%): En el MVP le damos puntaje completo. 
-        # (A futuro, si último_login < 7 días = 15, sino 0)
         pts_actividad = 15 
         
-        # E. Completitud (10%): Validamos campos clave
         pts_completitud = 0
         if prestador.foto_perfil: pts_completitud += 5
         if prestador.descripcion and len(prestador.descripcion) > 20: pts_completitud += 5
 
-        # 3. Sumatoria Final
         score_final = pts_calificacion + pts_resenas + pts_verificado + pts_actividad + pts_completitud
 
-        # 4. Regla de Negocio (Monetización): Los perfiles Premium rompen la escala para salir primeros
         if prestador.destacado:
             score_final += 1000 
 
-        # Empaquetamos los datos para enviarlos al cliente
         prestador_dict = prestador.__dict__.copy()
         prestador_dict['score'] = round(score_final, 2)
         prestador_dict['categories'] = prestador.categories
         
         resultados.append(prestador_dict)
 
-    # 5. Ordenamiento final: De mayor a menor Score
     resultados.sort(key=lambda x: x['score'], reverse=True)
-
     return resultados
 
 @app.post("/prestadores/{prestador_id}/resenas/")
@@ -233,18 +196,15 @@ def crear_resena(
     prestador_id: int,
     resena: schemas.ReviewCreate,
     db: Session = Depends(get_db),
-    usuario_actual: models.User = Depends(obtener_usuario_actual) # Candado: debe estar logueado
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
-    # 1. Verificamos que el prestador que quieren calificar realmente exista
     prestador = db.query(models.Provider).filter(models.Provider.id == prestador_id).first()
     if not prestador:
         raise HTTPException(status_code=404, detail="El prestador no existe")
         
-    # 2. Regla antifraude: Un prestador no puede auto-calificarse
     if prestador.user_id == usuario_actual.id:
         raise HTTPException(status_code=400, detail="No podés calificarte a vos mismo")
         
-    # 3. Armamos la reseña vinculando al prestador y al cliente que la escribe
     nueva_resena = models.Review(
         provider_id=prestador_id,
         client_id=usuario_actual.id,
@@ -257,15 +217,13 @@ def crear_resena(
     
     db.add(nueva_resena)
     db.commit()
-    
     return {"mensaje": "¡Reseña guardada exitosamente!"}
 
-# --- NUEVO ENDPOINT: PUBLICAR SOLICITUD DE TRABAJO ---
 @app.post("/solicitudes/", response_model=schemas.JobRequestOut)
 def crear_solicitud(
     solicitud: schemas.JobRequestCreate,
     db: Session = Depends(get_db),
-    usuario_actual: models.User = Depends(obtener_usuario_actual) # Candado: debe estar logueado
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
     nueva_solicitud = models.JobRequest(
         client_id=usuario_actual.id,
@@ -273,56 +231,41 @@ def crear_solicitud(
         ciudad=solicitud.ciudad,
         descripcion=solicitud.descripcion,
         presupuesto=solicitud.presupuesto,
-        estado="abierta" # Todas nacen abiertas
+        estado="abierta"
     )
     
     db.add(nueva_solicitud)
     db.commit()
     db.refresh(nueva_solicitud)
-    
     return nueva_solicitud
 
-# --- NUEVO ENDPOINT: VER CARTELERA DE TRABAJOS ---
 @app.get("/solicitudes/", response_model=List[schemas.JobRequestOut])
 def ver_solicitudes_abiertas(
     ciudad: Optional[str] = None,
     categoria: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    # Traemos solo las que están "abiertas"
     query = db.query(models.JobRequest).filter(models.JobRequest.estado == "abierta")
-    
-    # Filtro opcional por ciudad
     if ciudad:
         query = query.filter(models.JobRequest.ciudad.ilike(f"%{ciudad}%"))
-        
-    # Filtro opcional por categoría
     if categoria:
         query = query.filter(models.JobRequest.categoria.ilike(f"%{categoria}%"))
         
     return query.all()
 
-# --- NUEVO ENDPOINT: SUBIR IMAGEN ---
 @app.post("/upload/")
 def subir_imagen(file: UploadFile = File(...)):
-    # 1. Creamos un nombre único usando la fecha y hora actual para evitar nombres duplicados
     from datetime import datetime
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     nombre_seguro = f"{timestamp}_{file.filename.replace(' ', '_')}"
     
-    # 2. Definimos la ruta física donde se guardará en la computadora/servidor
-    ruta_guardado = os.path.join("static", "uploads", nombre_seguro)
+    ruta_guardado = os.path.join(UPLOADS_DIR, nombre_seguro)
     
-    # 3. Guardamos el archivo físicamente
     with open(ruta_guardado, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    # 4. Generamos la URL web para que el frontend o la base de datos puedan acceder a ella
-    url_imagen = f"http://127.0.0.1:8000/static/uploads/{nombre_seguro}"
-    
+    url_imagen = f"https://api-oficiosya.onrender.com/static/uploads/{nombre_seguro}" if os.getenv("DATABASE_URL") else f"http://127.0.0.1:8000/static/uploads/{nombre_seguro}"
     return {"mensaje": "Imagen subida con éxito", "url": url_imagen}
-
-# --- ENDPOINTS DE ADMINISTRACIÓN (PANEL DE CONTROL) ---
 
 @app.put("/admin/prestadores/{prestador_id}/verificar/")
 def verificar_prestador(
@@ -330,7 +273,6 @@ def verificar_prestador(
     db: Session = Depends(get_db),
     usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
-    # 1. Validamos que el usuario logueado sea el dueño/administrador
     if usuario_actual.rol != "admin":
         raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de administrador.")
         
@@ -338,10 +280,8 @@ def verificar_prestador(
     if not prestador:
         raise HTTPException(status_code=404, detail="Prestador no encontrado")
         
-    # 2. Le otorgamos la insignia de confianza
     prestador.verificado = True
     db.commit()
-    
     return {"mensaje": f"Identidad verificada. El score del prestador {prestador_id} va a subir 15 puntos."}
 
 @app.put("/admin/prestadores/{prestador_id}/destacar/")
@@ -357,10 +297,8 @@ def destacar_prestador(
     if not prestador:
         raise HTTPException(status_code=404, detail="Prestador no encontrado")
         
-    # 3. Activamos el modelo de monetización (Premium)
     prestador.destacado = True
     db.commit()
-    
     return {"mensaje": f"Suscripción activada. El prestador {prestador_id} ahora aparecerá primero en las búsquedas."}
 
 @app.post("/prestadores/me/portfolio/", response_model=schemas.PortfolioItemOut)
@@ -369,16 +307,11 @@ def subir_foto_portafolio(
     db: Session = Depends(get_db),
     usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
-    # 1. Verificamos que el usuario logueado realmente tenga un perfil de prestador
     prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
     if not prestador:
         raise HTTPException(status_code=400, detail="Primero debes crear tu perfil de prestador.")
 
-    # 2. Definimos el límite según el tipo de cuenta
-    # Si es destacado (Premium) permitimos 10, si es gratuito solo 2
     limite_fotos = 10 if prestador.destacado else 2
-
-    # 3. Contamos cuántas fotos ya tiene subidas actualmente
     fotos_actuales = db.query(models.PortfolioItem).filter(models.PortfolioItem.provider_id == prestador.id).count()
 
     if fotos_actuales >= limite_fotos:
@@ -386,18 +319,13 @@ def subir_foto_portafolio(
             status_code=400, 
             detail=f"Alcanzaste el límite de tu plan ({limite_fotos} fotos). Pasate a Premium para subir más."
         )
-    # 4. Subimos el archivo directamente a Cloudinary
+    
     try:
-        # Lo guardamos adentro de una carpeta llamada "portfolio" en la nube
         resultado = cloudinary.uploader.upload(file.file, folder="portfolio")
-        
-        # Cloudinary nos devuelve automáticamente la URL segura (https)
         url_publica = resultado.get("secure_url")
-        
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al subir la imagen: {e}")
 
-    # 5. Guardamos el registro en la base de datos de Neon
     nuevo_item = models.PortfolioItem(provider_id=prestador.id, url_foto=url_publica)
     db.add(nuevo_item)
     db.commit()
