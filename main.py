@@ -397,3 +397,7 @@ def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
             } for r in prestador.reviews
         ]
     }
+@app.get("/categorias/")
+def obtener_todas_las_categorias(db: Session = Depends(get_db)):
+    """Devuelve la lista completa de oficios para el frontend"""
+    return db.query(models.Category).all()
