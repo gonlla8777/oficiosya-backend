@@ -401,3 +401,80 @@ def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
 def obtener_todas_las_categorias(db: Session = Depends(get_db)):
     """Devuelve la lista completa de oficios para el frontend"""
     return db.query(models.Category).all()
+
+@app.get("/prestadores/me")
+def obtener_mi_perfil(
+    db: Session = Depends(get_db),
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
+):
+    """Busca si el usuario logueado ya tiene un perfil creado"""
+    prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
+    if not prestador:
+        return {"tiene_perfil": False}
+    
+    # Devolvemos los datos estructurados
+    return {
+        "tiene_perfil": True,
+        "id": prestador.id,
+        "dni": prestador.dni,
+        "ciudad": prestador.ciudad,
+        "provincia": prestador.provincia,
+        "descripcion": prestador.descripcion,
+        "experiencia": prestador.experiencia,
+        "whatsapp": prestador.whatsapp,
+        "foto_perfil": prestador.foto_perfil,
+        "verificado": prestador.verificado,
+        "destacado": prestador.destacado,
+        "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories]
+    }
+
+@app.put("/prestadores/me")
+def actualizar_mi_perfil(
+    datos: dict, # Recibimos el JSON flexible para el MVP
+    db: Session = Depends(get_db),
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
+):
+    """Modifica el perfil existente del trabajador"""
+    prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
+    if not prestador:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado")
+    
+    # Actualizamos los campos básicos
+    prestador.dni = datos.get("dni", prestador.dni)
+    prestador.provincia = datos.get("provincia", prestador.provincia)
+    prestador.ciudad = datos.get("ciudad", prestador.ciudad)
+    prestador.descripcion = datos.get("descripcion", prestador.descripcion)
+    prestador.experiencia = datos.get("experiencia", prestador.experiencia)
+    prestador.whatsapp = datos.get("whatsapp", prestador.whatsapp)
+    
+    # Si manda categorías, actualizamos la relación muchos a muchos
+    if "categorias_ids" in datos and datos["categorias_ids"]:
+        nuevas_cats = db.query(models.Category).filter(models.Category.id.in_(datos["categorias_ids"])).all()
+        prestador.categories = nuevas_cats
+
+    db.commit()
+    return {"mensaje": "Perfil actualizado con éxito"}
+
+@app.post("/prestadores/me/foto-perfil")
+async def subir_foto_perfil(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
+):
+    """Sube la foto del avatar principal a Cloudinary y guarda la URL"""
+    prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
+    if not prestador:
+        raise HTTPException(status_code=404, detail="Primero debés crear tu perfil básico")
+    
+    try:
+        # Subimos el archivo a una carpeta llamada 'avatars'
+        resultado = cloudinary.uploader.upload(file.file, folder="avatars")
+        url_foto = resultado.get("secure_url")
+        
+        # Guardamos la URL en la base de datos
+        prestador.foto_perfil = url_foto
+        db.commit()
+        
+        return {"mensaje": "Foto de perfil actualizada", "url_foto": url_foto}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al subir a Cloudinary: {str(e)}")
