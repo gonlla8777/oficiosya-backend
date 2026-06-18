@@ -43,7 +43,8 @@ class Provider(Base):
     foto_perfil = Column(String)
     verificado = Column(Boolean, default=False)
     destacado = Column(Boolean, default=False)
-
+    activo = Column(Boolean, default=True)
+    
     # Relaciones
     user = relationship("User", back_populates="provider_profile")
     categories = relationship("Category", secondary=provider_categories, back_populates="providers")

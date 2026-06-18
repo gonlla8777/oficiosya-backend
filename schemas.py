@@ -42,6 +42,7 @@ class ProviderOut(BaseModel):
     destacado: bool
     categories: List[CategoryOut] = []
     score: float = 0.0 # NUEVO: La métrica del ranking
+    activo: bool = True
 
     class Config:
         from_attributes = True

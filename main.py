@@ -165,9 +165,13 @@ def crear_perfil_prestador(
 def buscar_prestadores(
     ciudad: Optional[str] = None,
     categoria_id: Optional[int] = None,
+    admin_mode: bool = False, # <--- NUEVO: Para saber si busca el Admin
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Provider)
+    # NUEVO: Si NO es modo administrador, ocultamos los perfiles bloqueados
+    if not admin_mode:
+        query = query.filter(models.Provider.activo == True)
     if ciudad:
         query = query.filter(models.Provider.ciudad.ilike(f"%{ciudad}%"))
     if categoria_id:
@@ -197,7 +201,7 @@ def buscar_prestadores(
         prestador_dict = prestador.__dict__.copy()
         prestador_dict['score'] = round(score_final, 2)
         prestador_dict['categories'] = prestador.categories
-        
+        prestador_dict['activo'] = getattr(prestador, 'activo', True)
         resultados.append(prestador_dict)
 
     resultados.sort(key=lambda x: x['score'], reverse=True)
@@ -292,9 +296,10 @@ def verificar_prestador(
     if not prestador:
         raise HTTPException(status_code=404, detail="Prestador no encontrado")
         
-    prestador.verificado = True
+    # Ahora es un interruptor toggle
+    prestador.verificado = not prestador.verificado
     db.commit()
-    return {"mensaje": f"Identidad verificada. El score del prestador {prestador_id} va a subir 15 puntos."}
+    return {"mensaje": f"Estado de verificación actualizado a: {prestador.verificado}"}
 
 @app.put("/admin/prestadores/{prestador_id}/destacar/")
 def destacar_prestador(
@@ -309,9 +314,28 @@ def destacar_prestador(
     if not prestador:
         raise HTTPException(status_code=404, detail="Prestador no encontrado")
         
-    prestador.destacado = True
+    prestador.destacado = not prestador.destacado
     db.commit()
-    return {"mensaje": f"Suscripción activada. El prestador {prestador_id} ahora aparecerá primero en las búsquedas."}
+    return {"mensaje": f"Estado premium actualizado a: {prestador.destacado}"}
+
+# --- NUEVA RUTA: DESHABILITAR / HABILITAR CUENTAS ---
+@app.put("/admin/prestadores/{prestador_id}/toggle_activo/")
+def toggle_activo_prestador(
+    prestador_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
+):
+    if usuario_actual.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado.")
+        
+    prestador = db.query(models.Provider).filter(models.Provider.id == prestador_id).first()
+    if not prestador:
+        raise HTTPException(status_code=404, detail="Prestador no encontrado")
+        
+    prestador.activo = not getattr(prestador, 'activo', True)
+    db.commit()
+    estado_str = "Habilitado" if prestador.activo else "Deshabilitado/Bloqueado"
+    return {"mensaje": f"El prestador ahora está: {estado_str}"}
 
 @app.post("/prestadores/me/portfolio/", response_model=schemas.PortfolioItemOut)
 def subir_foto_portafolio(
