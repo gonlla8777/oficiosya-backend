@@ -34,30 +34,21 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
 # --- CONFIGURACIÓN CORS ---
-# Le abrimos la puerta al frontend para que pueda pedir datos
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # El "*" permite cualquier origen (ideal para desarrollo)
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# --------------------------
 
-# --- CONFIGURACIÓN DE RUTAS ABSOLUTAS (Asegura compatibilidad con Render) ---
-# 1. Obtenemos la ruta exacta de la carpeta donde está tu main.py
+# --- CONFIGURACIÓN DE RUTAS ABSOLUTAS ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# 2. Armamos la ruta completa y segura hacia 'static/uploads'
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 UPLOADS_DIR = os.path.join(STATIC_DIR, "uploads")
-
-# 3. Creamos las carpetas usando esa ruta exacta antes de montar
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
-# 4. Montamos FastAPI usando la ruta absoluta segura
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
 
 # Configuración de encriptación y JWT
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -65,7 +56,6 @@ SECRET_KEY = os.getenv("SECRET_KEY", "clave_de_respaldo")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # El token dura 7 días
 
-# Le indicamos a FastAPI dónde tiene que ir el usuario a buscar su token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # Dependencia para obtener el usuario actual mediante el Token
@@ -161,15 +151,15 @@ def crear_perfil_prestador(
     
     return {"mensaje": "Perfil de prestador creado con éxito", "prestador_id": nuevo_prestador.id}
 
-@app.get("/prestadores/buscar/", response_model=List[schemas.ProviderOut])
+@app.get("/prestadores/buscar/")
 def buscar_prestadores(
     ciudad: Optional[str] = None,
     categoria_id: Optional[int] = None,
-    admin_mode: bool = False, # <--- NUEVO: Para saber si busca el Admin
+    admin_mode: bool = False,
     db: Session = Depends(get_db)
 ):
     query = db.query(models.Provider)
-    # NUEVO: Si NO es modo administrador, ocultamos los perfiles bloqueados
+    
     if not admin_mode:
         query = query.filter(models.Provider.activo == True)
     if ciudad:
@@ -198,10 +188,24 @@ def buscar_prestadores(
         if prestador.destacado:
             score_final += 1000 
 
-        prestador_dict = prestador.__dict__.copy()
-        prestador_dict['score'] = round(score_final, 2)
-        prestador_dict['categories'] = prestador.categories
-        prestador_dict['activo'] = getattr(prestador, 'activo', True)
+        # Construcción manual y robusta del diccionario de salida para evitar fallos de mapeo
+        prestador_dict = {
+            "id": prestador.id,
+            "user_id": prestador.user_id,
+            "nombre": prestador.user.nombre, # Enlazado para mostrar en Home.jsx
+            "dni": prestador.dni,
+            "ciudad": prestador.ciudad,
+            "provincia": prestador.provincia,
+            "descripcion": prestador.descripcion,
+            "experiencia": prestador.experiencia,
+            "whatsapp": prestador.whatsapp,
+            "foto_perfil": prestador.foto_perfil, # Enlazado para mostrar en Home.jsx
+            "verificado": prestador.verificado,
+            "destacado": prestador.destacado,
+            "activo": getattr(prestador, 'activo', True),
+            "score": round(score_final, 2),
+            "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories] # Unificado al español
+        }
         resultados.append(prestador_dict)
 
     resultados.sort(key=lambda x: x['score'], reverse=True)
@@ -235,46 +239,10 @@ def crear_resena(
     db.commit()
     return {"mensaje": "¡Reseña guardada exitosamente!"}
 
-@app.post("/solicitudes/", response_model=schemas.JobRequestOut)
-def crear_solicitud(
-    solicitud: schemas.JobRequestCreate,
-    db: Session = Depends(get_db),
-    usuario_actual: models.User = Depends(obtener_usuario_actual)
-):
-    nueva_solicitud = models.JobRequest(
-        client_id=usuario_actual.id,
-        categoria=solicitud.categoria,
-        ciudad=solicitud.ciudad,
-        descripcion=solicitud.descripcion,
-        presupuesto=solicitud.presupuesto,
-        estado="abierta"
-    )
-    
-    db.add(nueva_solicitud)
-    db.commit()
-    db.refresh(nueva_solicitud)
-    return nueva_solicitud
-
-@app.get("/solicitudes/", response_model=List[schemas.JobRequestOut])
-def ver_solicitudes_abiertas(
-    ciudad: Optional[str] = None,
-    categoria: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    query = db.query(models.JobRequest).filter(models.JobRequest.estado == "abierta")
-    if ciudad:
-        query = query.filter(models.JobRequest.ciudad.ilike(f"%{ciudad}%"))
-    if categoria:
-        query = query.filter(models.JobRequest.categoria.ilike(f"%{categoria}%"))
-        
-    return query.all()
-
 @app.post("/upload/")
 def subir_imagen(file: UploadFile = File(...)):
-    from datetime import datetime
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     nombre_seguro = f"{timestamp}_{file.filename.replace(' ', '_')}"
-    
     ruta_guardado = os.path.join(UPLOADS_DIR, nombre_seguro)
     
     with open(ruta_guardado, "wb") as buffer:
@@ -296,7 +264,6 @@ def verificar_prestador(
     if not prestador:
         raise HTTPException(status_code=404, detail="Prestador no encontrado")
         
-    # Ahora es un interruptor toggle
     prestador.verificado = not prestador.verificado
     db.commit()
     return {"mensaje": f"Estado de verificación actualizado a: {prestador.verificado}"}
@@ -318,7 +285,6 @@ def destacar_prestador(
     db.commit()
     return {"mensaje": f"Estado premium actualizado a: {prestador.destacado}"}
 
-# --- NUEVA RUTA: DESHABILITAR / HABILITAR CUENTAS ---
 @app.put("/admin/prestadores/{prestador_id}/toggle_activo/")
 def toggle_activo_prestador(
     prestador_id: int,
@@ -371,12 +337,10 @@ def subir_foto_portafolio(
 
 @app.get("/prestadores/detalle/{prestador_id}")
 def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
-    # Buscamos al prestador
     prestador = db.query(models.Provider).filter(models.Provider.id == prestador_id).first()
     if not prestador:
         raise HTTPException(status_code=404, detail="Prestador no encontrado")
     
-    # Armamos un paquete con toda su información para la vidriera
     return {
         "id": prestador.id,
         "nombre": prestador.user.nombre,
@@ -384,6 +348,7 @@ def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
         "descripcion": prestador.descripcion,
         "experiencia": prestador.experiencia,
         "whatsapp": prestador.whatsapp,
+        "foto_perfil": prestador.foto_perfil, # Entregado correctamente a PerfilDetalle.jsx
         "verificado": prestador.verificado,
         "destacado": prestador.destacado,
         "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories],
@@ -397,6 +362,7 @@ def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
             } for r in prestador.reviews
         ]
     }
+
 @app.get("/categorias/")
 def obtener_todas_las_categorias(db: Session = Depends(get_db)):
     """Devuelve la lista completa de oficios para el frontend"""
@@ -412,7 +378,6 @@ def obtener_mi_perfil(
     if not prestador:
         return {"tiene_perfil": False}
     
-    # Devolvemos los datos estructurados
     return {
         "tiene_perfil": True,
         "id": prestador.id,
@@ -425,12 +390,13 @@ def obtener_mi_perfil(
         "foto_perfil": prestador.foto_perfil,
         "verificado": prestador.verificado,
         "destacado": prestador.destacado,
-        "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories]
+        "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories],
+        "portfolio": [{"id": p.id, "url_foto": p.url_foto} for p in prestador.portfolio] # Entregado correctamente a Dashboard.jsx
     }
 
 @app.put("/prestadores/me")
 def actualizar_mi_perfil(
-    datos: dict, # Recibimos el JSON flexible para el MVP
+    datos: dict, 
     db: Session = Depends(get_db),
     usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
@@ -439,7 +405,6 @@ def actualizar_mi_perfil(
     if not prestador:
         raise HTTPException(status_code=404, detail="Perfil no encontrado")
     
-    # Actualizamos los campos básicos
     prestador.dni = datos.get("dni", prestador.dni)
     prestador.provincia = datos.get("provincia", prestador.provincia)
     prestador.ciudad = datos.get("ciudad", prestador.ciudad)
@@ -447,7 +412,6 @@ def actualizar_mi_perfil(
     prestador.experiencia = datos.get("experiencia", prestador.experiencia)
     prestador.whatsapp = datos.get("whatsapp", prestador.whatsapp)
     
-    # Si manda categorías, actualizamos la relación muchos a muchos
     if "categorias_ids" in datos and datos["categorias_ids"]:
         nuevas_cats = db.query(models.Category).filter(models.Category.id.in_(datos["categorias_ids"])).all()
         prestador.categories = nuevas_cats
@@ -467,14 +431,31 @@ async def subir_foto_perfil(
         raise HTTPException(status_code=404, detail="Primero debés crear tu perfil básico")
     
     try:
-        # Subimos el archivo a una carpeta llamada 'avatars'
         resultado = cloudinary.uploader.upload(file.file, folder="avatars")
         url_foto = resultado.get("secure_url")
         
-        # Guardamos la URL en la base de datos
         prestador.foto_perfil = url_foto
         db.commit()
         
         return {"mensaje": "Foto de perfil actualizada", "url_foto": url_foto}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al subir a Cloudinary: {str(e)}")
+    
+@app.delete("/prestadores/me/portfolio/{foto_id}")
+def eliminar_foto_portfolio(
+    foto_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
+):
+    """Elimina una foto específica del portafolio del usuario"""
+    prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
+    if not prestador:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado")
+    
+    foto = db.query(models.PortfolioItem).filter(models.PortfolioItem.id == foto_id, models.PortfolioItem.provider_id == prestador.id).first()
+    if not foto:
+        raise HTTPException(status_code=404, detail="Foto no encontrada o no te pertenece")
+    
+    db.delete(foto)
+    db.commit()
+    return {"mensaje": "Foto eliminada con éxito"}
