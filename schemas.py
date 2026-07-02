@@ -19,7 +19,7 @@ class ProviderCreate(BaseModel):
     experiencia: str
     whatsapp: str
     categorias_ids: List[int] # Una lista con los IDs de los oficios que hace (ej. [8] para Mecánico)
-
+    urgencias: Optional[bool] = False
 # ... (tu código anterior) ...
 
 # Esquema para mostrar la categoría dentro del perfil

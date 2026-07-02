@@ -139,6 +139,7 @@ def crear_perfil_prestador(
         descripcion=perfil.descripcion,
         experiencia=perfil.experiencia,
         whatsapp=perfil.whatsapp
+        urgencias=perfil.urgencias
     )
     
     categorias = db.query(models.Category).filter(models.Category.id.in_(perfil.categorias_ids)).all()
@@ -412,6 +413,9 @@ def actualizar_mi_perfil(
     prestador.experiencia = datos.get("experiencia", prestador.experiencia)
     prestador.whatsapp = datos.get("whatsapp", prestador.whatsapp)
     
+    if "urgencias" in datos:
+        prestador.urgencias = datos["urgencias"]
+
     if "categorias_ids" in datos and datos["categorias_ids"]:
         nuevas_cats = db.query(models.Category).filter(models.Category.id.in_(datos["categorias_ids"])).all()
         prestador.categories = nuevas_cats

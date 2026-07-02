@@ -44,6 +44,7 @@ class Provider(Base):
     verificado = Column(Boolean, default=False)
     destacado = Column(Boolean, default=False)
     activo = Column(Boolean, default=True)
+    urgencias = Column(Boolean, default=False)
     
     # Relaciones
     user = relationship("User", back_populates="provider_profile")
