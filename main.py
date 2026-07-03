@@ -138,7 +138,7 @@ def crear_perfil_prestador(
         provincia=perfil.provincia,
         descripcion=perfil.descripcion,
         experiencia=perfil.experiencia,
-        whatsapp=perfil.whatsapp
+        whatsapp=perfil.whatsapp,
         urgencias=perfil.urgencias
     )
     
@@ -412,7 +412,7 @@ def actualizar_mi_perfil(
     prestador.descripcion = datos.get("descripcion", prestador.descripcion)
     prestador.experiencia = datos.get("experiencia", prestador.experiencia)
     prestador.whatsapp = datos.get("whatsapp", prestador.whatsapp)
-    
+
     if "urgencias" in datos:
         prestador.urgencias = datos["urgencias"]
 
