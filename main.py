@@ -237,7 +237,7 @@ def buscar_prestadores(
 
         # Construcción manual y robusta del diccionario de salida para evitar fallos de mapeo
         prestador_dict = {
-            "id": prestador.id,
+            "instagram": getattr(prestador, 'instagram', None),
             "user_id": prestador.user_id,
             "nombre": prestador.user.nombre, # Enlazado para mostrar en Home.jsx
             "dni": prestador.dni,
