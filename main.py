@@ -240,7 +240,6 @@ def buscar_prestadores(
             "instagram": getattr(prestador, 'instagram', None),
             "user_id": prestador.user_id,
             "nombre": prestador.user.nombre, # Enlazado para mostrar en Home.jsx
-            "dni": prestador.dni,
             "ciudad": prestador.ciudad,
             "provincia": prestador.provincia,
             "descripcion": prestador.descripcion,
