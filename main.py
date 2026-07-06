@@ -384,29 +384,28 @@ def subir_foto_portafolio(
 @app.get("/prestadores/detalle/{prestador_id}")
 def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
     prestador = db.query(models.Provider).filter(models.Provider.id == prestador_id).first()
+    
     if not prestador:
         raise HTTPException(status_code=404, detail="Prestador no encontrado")
-    
+
     return {
         "id": prestador.id,
-        "nombre": prestador.user.nombre,
+        "user_id": prestador.user_id,
+        # MAGIA 1: Le mandamos el nombre desde la tabla de usuarios
+        "nombre": prestador.user.nombre, 
+        # MAGIA 2: El truco del "plan B" para la foto
+        "foto_perfil": prestador.foto_perfil or prestador.user.foto_perfil, 
+        "instagram": getattr(prestador, 'instagram', None),
         "ciudad": prestador.ciudad,
+        "provincia": prestador.provincia,
         "descripcion": prestador.descripcion,
         "experiencia": prestador.experiencia,
         "whatsapp": prestador.whatsapp,
-        "foto_perfil": prestador.foto_perfil or prestador.user.foto_perfil,
         "verificado": prestador.verificado,
         "destacado": prestador.destacado,
+        "urgencias": getattr(prestador, 'urgencias', False),
         "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories],
-        "portfolio": [{"id": p.id, "url_foto": p.url_foto} for p in prestador.portfolio],
-        "reviews": [
-            {
-                "id": r.id, 
-                "comentario": r.comentario, 
-                "calidad": r.calidad,
-                "fecha": r.created_at.strftime("%d/%m/%Y")
-            } for r in prestador.reviews
-        ]
+        "portfolio": [{"id": p.id, "url_foto": p.url_foto} for p in prestador.portfolio]
     }
 
 @app.get("/categorias/")
