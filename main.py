@@ -12,10 +12,11 @@ import shutil
 import cloudinary
 import cloudinary.uploader
 from fastapi.middleware.cors import CORSMiddleware
-
 import models
 import schemas
 from database import engine, get_db
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 # Cargamos las variables del .env
 load_dotenv()
@@ -120,6 +121,40 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     
     access_token = crear_token_acceso(data={"sub": user.email, "id": user.id, "rol": user.rol})
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/auth/google/")
+def login_google(google_data: dict, db: Session = Depends(get_db)):
+    token = google_data.get("token")
+    # Este ID lo vamos a crear en el próximo paso, por ahora lo lee de tu archivo .env
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "tu_client_id_aca") 
+    
+    try:
+        # 1. Validamos el token con los servidores oficiales de Google
+        idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), GOOGLE_CLIENT_ID)
+        email = idinfo['email']
+        nombre = idinfo.get('name', 'Usuario de Google')
+
+        # 2. Buscamos si el usuario ya existe en nuestra base de datos
+        user = db.query(models.User).filter(models.User.email == email).first()
+
+        if not user:
+            # 3. Si es la primera vez que entra, le creamos la cuenta automáticamente
+            user = models.User(
+                nombre=nombre,
+                email=email,
+                password_hash=None, # ¡Entra sin contraseña!
+                rol="cliente"
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        # 4. Le generamos nuestra "pulsera VIP" (el mismo token JWT que usan todos en tu app)
+        access_token = crear_token_acceso(data={"sub": user.email, "id": user.id, "rol": user.rol})
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    except ValueError:
+        raise HTTPException(status_code=400, detail="El token de Google es inválido o expiró.")
 
 @app.post("/prestadores/")
 def crear_perfil_prestador(

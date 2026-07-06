@@ -21,7 +21,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     nombre = Column(String, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
-    password_hash = Column(String, nullable=False)
+    password_hash = Column(String, nullable=True)
     telefono = Column(String)
     rol = Column(String, default="cliente") 
     fecha_registro = Column(DateTime, default=datetime.datetime.utcnow)
