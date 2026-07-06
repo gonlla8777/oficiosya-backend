@@ -481,19 +481,24 @@ async def subir_foto_perfil(
     db: Session = Depends(get_db),
     usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
-    """Sube la foto del avatar principal a Cloudinary y guarda la URL"""
-    prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
-    if not prestador:
-        raise HTTPException(status_code=404, detail="Primero debés crear tu perfil básico")
-    
+    """Sube la foto a Cloudinary y la guarda en la cuenta del usuario"""
     try:
+        # 1. Subimos la imagen a Cloudinary
         resultado = cloudinary.uploader.upload(file.file, folder="avatars")
         url_foto = resultado.get("secure_url")
         
-        prestador.foto_perfil = url_foto
+        # 2. Actualizamos la foto en la cuenta base del usuario (¡Para que siempre funcione!)
+        usuario_actual.foto_perfil = url_foto
+        
+        # 3. Si por casualidad ya tiene su perfil de prestador creado, también se la actualizamos ahí
+        prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
+        if prestador:
+            prestador.foto_perfil = url_foto
+            
         db.commit()
         
         return {"mensaje": "Foto de perfil actualizada", "url_foto": url_foto}
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al subir a Cloudinary: {str(e)}")
     
