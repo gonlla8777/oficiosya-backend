@@ -245,7 +245,7 @@ def buscar_prestadores(
             "descripcion": prestador.descripcion,
             "experiencia": prestador.experiencia,
             "whatsapp": prestador.whatsapp,
-            "foto_perfil": prestador.foto_perfil, # Enlazado para mostrar en Home.jsx
+            "foto_perfil": prestador.foto_perfil or prestador.user.foto_perfil, # Enlazado para mostrar en Home.jsx
             "verificado": prestador.verificado,
             "destacado": prestador.destacado,
             "activo": getattr(prestador, 'activo', True),
@@ -394,7 +394,7 @@ def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
         "descripcion": prestador.descripcion,
         "experiencia": prestador.experiencia,
         "whatsapp": prestador.whatsapp,
-        "foto_perfil": prestador.foto_perfil, # Entregado correctamente a PerfilDetalle.jsx
+        "foto_perfil": prestador.foto_perfil or prestador.user.foto_perfil,
         "verificado": prestador.verificado,
         "destacado": prestador.destacado,
         "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories],
