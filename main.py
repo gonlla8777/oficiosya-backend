@@ -410,11 +410,18 @@ def obtener_mi_perfil(
     db: Session = Depends(get_db),
     usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
-    """Busca si el usuario logueado ya tiene un perfil creado"""
+    """Busca si el usuario logueado ya tiene un perfil de trabajador creado"""
     prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
-    if not prestador:
-        return {"tiene_perfil": False}
     
+    # 1. SI NO TIENE PERFIL, LE MANDAMOS SUS DATOS DE GOOGLE IGUAL
+    if not prestador:
+        return {
+            "tiene_perfil": False,
+            "nombre": usuario_actual.nombre,
+            "foto_perfil": usuario_actual.foto_perfil
+        }
+    
+    # 2. SI TIENE PERFIL, MANDAMOS TODO
     return {
         "tiene_perfil": True,
         "id": prestador.id,
@@ -424,11 +431,13 @@ def obtener_mi_perfil(
         "descripcion": prestador.descripcion,
         "experiencia": prestador.experiencia,
         "whatsapp": prestador.whatsapp,
-        "foto_perfil": prestador.foto_perfil,
+        # MAGIA: Si el prestador no subió una foto específica de trabajo, usamos la de su cuenta
+        "foto_perfil": prestador.foto_perfil or usuario_actual.foto_perfil, 
         "verificado": prestador.verificado,
         "destacado": prestador.destacado,
+        "urgencias": getattr(prestador, 'urgencias', False),
         "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories],
-        "portfolio": [{"id": p.id, "url_foto": p.url_foto} for p in prestador.portfolio] # Entregado correctamente a Dashboard.jsx
+        "portfolio": [{"id": p.id, "url_foto": p.url_foto} for p in prestador.portfolio]
     }
 
 @app.put("/prestadores/me")
