@@ -139,7 +139,7 @@ def login_google(google_data: dict, db: Session = Depends(get_db)):
         user = db.query(models.User).filter(models.User.email == email).first()
 
         if not user:
-            # 3. Si es nuevo, lo creamos con todos los datos
+            # 3. Si es la primera vez que entra, le creamos la cuenta y guardamos la foto
             user = models.User(
                 nombre=nombre,
                 email=email,
@@ -149,9 +149,12 @@ def login_google(google_data: dict, db: Session = Depends(get_db)):
             )
             db.add(user)
         else:
-            # Novedad: Si ya existía, le actualizamos el nombre y la foto (por si son de pruebas viejas)
+            # 4. Si el usuario ya existía, actualizamos su nombre
             user.nombre = nombre
-            if foto:
+            
+            # EL CANDADO: Solo guardamos la foto de Google si NO tenía ninguna foto previa.
+            # Si ya subió una foto propia a Cloudinary, la respetamos.
+            if not user.foto_perfil and foto:
                 user.foto_perfil = foto
 
         db.commit()
