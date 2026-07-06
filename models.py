@@ -25,7 +25,7 @@ class User(Base):
     telefono = Column(String)
     rol = Column(String, default="cliente") 
     fecha_registro = Column(DateTime, default=datetime.datetime.utcnow)
-
+    foto_perfil = Column(String, nullable=True)
     provider_profile = relationship("Provider", back_populates="user", uselist=False)
 
 

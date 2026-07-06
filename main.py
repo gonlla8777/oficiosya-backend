@@ -133,7 +133,7 @@ def login_google(google_data: dict, db: Session = Depends(get_db)):
         idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), GOOGLE_CLIENT_ID)
         email = idinfo['email']
         nombre = idinfo.get('name', 'Usuario de Google')
-
+        foto = idinfo.get('picture', None)
         # 2. Buscamos si el usuario ya existe en nuestra base de datos
         user = db.query(models.User).filter(models.User.email == email).first()
 
@@ -143,6 +143,7 @@ def login_google(google_data: dict, db: Session = Depends(get_db)):
                 nombre=nombre,
                 email=email,
                 password_hash=None, # ¡Entra sin contraseña!
+                foto_perfil=foto,
                 rol="cliente"
             )
             db.add(user)
