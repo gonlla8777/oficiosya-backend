@@ -135,20 +135,27 @@ def login_google(google_data: dict, db: Session = Depends(get_db)):
         nombre = idinfo.get('name', 'Usuario de Google')
         foto = idinfo.get('picture', None)
         # 2. Buscamos si el usuario ya existe en nuestra base de datos
+        # 2. Buscamos si el usuario ya existe
         user = db.query(models.User).filter(models.User.email == email).first()
 
         if not user:
-            # 3. Si es la primera vez que entra, le creamos la cuenta automáticamente
+            # 3. Si es nuevo, lo creamos con todos los datos
             user = models.User(
                 nombre=nombre,
                 email=email,
-                password_hash=None, # ¡Entra sin contraseña!
+                password_hash=None,
                 foto_perfil=foto,
                 rol="cliente"
             )
             db.add(user)
-            db.commit()
-            db.refresh(user)
+        else:
+            # Novedad: Si ya existía, le actualizamos el nombre y la foto (por si son de pruebas viejas)
+            user.nombre = nombre
+            if foto:
+                user.foto_perfil = foto
+
+        db.commit()
+        db.refresh(user)
 
         # 4. Le generamos nuestra "pulsera VIP" (el mismo token JWT que usan todos en tu app)
         access_token = crear_token_acceso(data={"sub": user.email, "id": user.id, "rol": user.rol})
