@@ -237,20 +237,21 @@ def buscar_prestadores(
 
         # Construcción manual y robusta del diccionario de salida para evitar fallos de mapeo
         prestador_dict = {
+            "id": prestador.id,  # <--- ¡AGREGÁ ESTA LÍNEA ACÁ!
             "instagram": getattr(prestador, 'instagram', None),
             "user_id": prestador.user_id,
-            "nombre": prestador.user.nombre, # Enlazado para mostrar en Home.jsx
+            "nombre": prestador.user.nombre, 
             "ciudad": prestador.ciudad,
             "provincia": prestador.provincia,
             "descripcion": prestador.descripcion,
             "experiencia": prestador.experiencia,
             "whatsapp": prestador.whatsapp,
-            "foto_perfil": prestador.foto_perfil or prestador.user.foto_perfil, # Enlazado para mostrar en Home.jsx
+            "foto_perfil": prestador.foto_perfil or prestador.user.foto_perfil, 
             "verificado": prestador.verificado,
             "destacado": prestador.destacado,
             "activo": getattr(prestador, 'activo', True),
             "score": round(score_final, 2),
-            "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories] # Unificado al español
+            "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories] 
         }
         resultados.append(prestador_dict)
 
@@ -433,12 +434,12 @@ def obtener_mi_perfil(
     return {
         "tiene_perfil": True,
         "id": prestador.id,
+        "nombre": usuario_actual.nombre,  # <--- ¡AGREGÁ ESTA LÍNEA ACÁ!
         "ciudad": prestador.ciudad,
         "provincia": prestador.provincia,
         "descripcion": prestador.descripcion,
         "experiencia": prestador.experiencia,
         "whatsapp": prestador.whatsapp,
-        # MAGIA: Si el prestador no subió una foto específica de trabajo, usamos la de su cuenta
         "foto_perfil": prestador.foto_perfil or usuario_actual.foto_perfil, 
         "verificado": prestador.verificado,
         "destacado": prestador.destacado,
