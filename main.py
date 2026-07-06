@@ -434,7 +434,6 @@ def obtener_mi_perfil(
     return {
         "tiene_perfil": True,
         "id": prestador.id,
-        "dni": prestador.dni,
         "ciudad": prestador.ciudad,
         "provincia": prestador.provincia,
         "descripcion": prestador.descripcion,
