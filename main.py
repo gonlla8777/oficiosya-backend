@@ -179,7 +179,7 @@ def crear_perfil_prestador(
     
     nuevo_prestador = models.Provider(
         user_id=usuario_actual.id,
-        dni=perfil.dni,
+        instagram=perfil.instagram,
         ciudad=perfil.ciudad,
         provincia=perfil.provincia,
         descripcion=perfil.descripcion,
@@ -461,7 +461,7 @@ def actualizar_mi_perfil(
     if not prestador:
         raise HTTPException(status_code=404, detail="Perfil no encontrado")
     
-    prestador.dni = datos.get("dni", prestador.dni)
+    prestador.instagram = datos.get("instagram", prestador.instagram)
     prestador.provincia = datos.get("provincia", prestador.provincia)
     prestador.ciudad = datos.get("ciudad", prestador.ciudad)
     prestador.descripcion = datos.get("descripcion", prestador.descripcion)

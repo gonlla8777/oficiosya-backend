@@ -12,7 +12,6 @@ class UserCreate(BaseModel):
     rol: str = "cliente" # Por defecto, todos nacen como clientes]
 
 class ProviderCreate(BaseModel):
-    dni: str
     ciudad: str
     provincia: str
     descripcion: str
@@ -20,6 +19,7 @@ class ProviderCreate(BaseModel):
     whatsapp: str
     categorias_ids: List[int] # Una lista con los IDs de los oficios que hace (ej. [8] para Mecánico)
     urgencias: Optional[bool] = False
+    instagram: Optional[str] = None
 # ... (tu código anterior) ...
 
 # Esquema para mostrar la categoría dentro del perfil
