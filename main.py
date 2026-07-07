@@ -354,6 +354,42 @@ def toggle_activo_prestador(
     estado_str = "Habilitado" if prestador.activo else "Deshabilitado/Bloqueado"
     return {"mensaje": f"El prestador ahora está: {estado_str}"}
 
+@app.get("/admin/estadisticas/")
+def obtener_estadisticas_admin(
+    db: Session = Depends(get_db),
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
+):
+    """Devuelve métricas clave del negocio para el dashboard del administrador"""
+    if usuario_actual.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de administrador.")
+
+    # 1. Conteos básicos
+    total_usuarios = db.query(models.User).count()
+    total_prestadores = db.query(models.Provider).count()
+    prestadores_activos = db.query(models.Provider).filter(models.Provider.activo == True).count()
+    total_resenas = db.query(models.Review).count()
+
+    # 2. Calcular los oficios más populares (según cuántos profesionales los ofrecen)
+    todas_categorias = db.query(models.Category).all()
+    todos_prestadores = db.query(models.Provider).all()
+    
+    conteo_categorias = {cat.nombre: 0 for cat in todas_categorias}
+    for p in todos_prestadores:
+        for c in p.categories:
+            conteo_categorias[c.nombre] = conteo_categorias.get(c.nombre, 0) + 1
+            
+    # Formatear y ordenar de mayor a menor
+    top_categorias = [{"nombre": k, "cantidad": v} for k, v in conteo_categorias.items() if v > 0]
+    top_categorias.sort(key=lambda x: x["cantidad"], reverse=True)
+
+    return {
+        "total_usuarios": total_usuarios,
+        "total_prestadores": total_prestadores,
+        "prestadores_activos": prestadores_activos,
+        "total_resenas": total_resenas,
+        "top_categorias": top_categorias[:5] # Mandamos solo el Top 5
+    }
+
 @app.post("/prestadores/me/portfolio/", response_model=schemas.PortfolioItemOut)
 def subir_foto_portafolio(
     file: UploadFile = File(...),

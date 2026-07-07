@@ -35,6 +35,8 @@ class Provider(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True)
     instagram = Column(String, nullable=True)
+    facebook = Column(String, nullable=True) 
+    linkedin = Column(String, nullable=True) 
     ciudad = Column(String)
     provincia = Column(String)
     descripcion = Column(Text)
