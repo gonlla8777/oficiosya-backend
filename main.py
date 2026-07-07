@@ -527,3 +527,25 @@ def eliminar_foto_portfolio(
     db.delete(foto)
     db.commit()
     return {"mensaje": "Foto eliminada con éxito"}
+
+@app.delete("/admin/resenas/{resena_id}")
+def eliminar_resena(
+    resena_id: int,
+    db: Session = Depends(get_db),
+    usuario_actual: models.User = Depends(obtener_usuario_actual)
+):
+    """Permite a un administrador eliminar una reseña inapropiada"""
+    # 1. Verificamos que sea un admin
+    if usuario_actual.rol != "admin":
+        raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de administrador.")
+        
+    # 2. Buscamos la reseña
+    resena = db.query(models.Review).filter(models.Review.id == resena_id).first()
+    if not resena:
+        raise HTTPException(status_code=404, detail="Reseña no encontrada")
+        
+    # 3. La eliminamos de la base de datos
+    db.delete(resena)
+    db.commit()
+    
+    return {"mensaje": "Reseña eliminada con éxito"}
