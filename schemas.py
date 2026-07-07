@@ -20,6 +20,8 @@ class ProviderCreate(BaseModel):
     categorias_ids: List[int] # Una lista con los IDs de los oficios que hace (ej. [8] para Mecánico)
     urgencias: Optional[bool] = False
     instagram: Optional[str] = None
+    facebook: Optional[str] = None
+    linkedin: Optional[str] = None
 # ... (tu código anterior) ...
 
 # Esquema para mostrar la categoría dentro del perfil

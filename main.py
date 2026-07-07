@@ -180,6 +180,8 @@ def crear_perfil_prestador(
     nuevo_prestador = models.Provider(
         user_id=usuario_actual.id,
         instagram=perfil.instagram,
+        facebook=perfil.facebook,
+        linkedin=perfil.linkedin,
         ciudad=perfil.ciudad,
         provincia=perfil.provincia,
         descripcion=perfil.descripcion,
@@ -239,6 +241,8 @@ def buscar_prestadores(
         prestador_dict = {
             "id": prestador.id,  # <--- ¡AGREGÁ ESTA LÍNEA ACÁ!
             "instagram": getattr(prestador, 'instagram', None),
+            "facebook": getattr(prestador, 'facebook', None),
+            "linkedin": getattr(prestador, 'linkedin', None),
             "user_id": prestador.user_id,
             "nombre": prestador.user.nombre, 
             "ciudad": prestador.ciudad,
@@ -460,6 +464,8 @@ def actualizar_mi_perfil(
         raise HTTPException(status_code=404, detail="Perfil no encontrado")
     
     prestador.instagram = datos.get("instagram", prestador.instagram)
+    prestador.facebook = datos.get("facebook", prestador.facebook)
+    prestador.linkedin = datos.get("linkedin", prestador.linkedin)
     prestador.provincia = datos.get("provincia", prestador.provincia)
     prestador.ciudad = datos.get("ciudad", prestador.ciudad)
     prestador.descripcion = datos.get("descripcion", prestador.descripcion)
