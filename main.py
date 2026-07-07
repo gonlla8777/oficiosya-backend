@@ -410,7 +410,17 @@ def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
         "destacado": prestador.destacado,
         "urgencias": getattr(prestador, 'urgencias', False),
         "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories],
-        "portfolio": [{"id": p.id, "url_foto": p.url_foto} for p in prestador.portfolio]
+        "portfolio": [{"id": p.id, "url_foto": p.url_foto} for p in prestador.portfolio],
+
+        "reviews": [
+            {
+                "id": r.id,
+                "calidad": r.calidad,
+                "comentario": r.comentario,
+                "fecha": r.fecha.strftime('%d/%m/%Y') if hasattr(r, 'fecha') and hasattr(r.fecha, 'strftime') else str(getattr(r, 'fecha', ''))
+            } for r in prestador.reviews
+        ]
+    
     }
 
 @app.get("/categorias/")
