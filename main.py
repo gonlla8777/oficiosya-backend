@@ -14,6 +14,7 @@ import cloudinary.uploader
 from fastapi.middleware.cors import CORSMiddleware
 import models
 import schemas
+import re
 from database import engine, get_db
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -87,6 +88,27 @@ def crear_token_acceso(data: dict):
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+# --- FILTRO ANTISPAM Y LENGUAJE INAPROPIADO ---
+def contiene_malas_palabras(texto: str) -> bool:
+    if not texto:
+        return False
+        
+    # Lista de palabras bloqueadas (todo en minúscula)
+    malas_palabras = [
+        "puto", "puta", "mierda", "carajo", "boludo", "pelotudo", 
+        "idiota", "estupido", "estúpido", "imbecil", "imbécil", 
+        "concha", "verga", "pija", "chupa", "putos", "putas"
+    ]
+    
+    texto_lower = texto.lower()
+    for palabra in malas_palabras:
+        # Usamos \b para detectar la palabra exacta y no censurar partes de otras palabras
+        # Por ejemplo, bloquea "puta" pero permite "computadora" o "reputación"
+        if re.search(rf'\b{palabra}\b', texto_lower):
+            return True
+            
+    return False
 
 @app.get("/")
 def leer_raiz():
@@ -174,6 +196,8 @@ def crear_perfil_prestador(
     perfil_existente = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
     if perfil_existente:
         raise HTTPException(status_code=400, detail="Este usuario ya tiene un perfil de prestador")
+    if contiene_malas_palabras(perfil.descripcion):
+        raise HTTPException(status_code=400, detail="La descripción contiene lenguaje inapropiado. Por favor, modificala.")
     
     nuevo_prestador = models.Provider(
         user_id=usuario_actual.id,
@@ -266,12 +290,31 @@ def crear_resena(
     db: Session = Depends(get_db),
     usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
+    # 1. Filtro de Lenguaje Inapropiado
+    if contiene_malas_palabras(resena.comentario):
+        raise HTTPException(
+            status_code=400, 
+            detail="Tu reseña contiene lenguaje inapropiado y no puede ser publicada."
+        )
+
     prestador = db.query(models.Provider).filter(models.Provider.id == prestador_id).first()
     if not prestador:
         raise HTTPException(status_code=404, detail="El prestador no existe")
         
     if prestador.user_id == usuario_actual.id:
         raise HTTPException(status_code=400, detail="No podés calificarte a vos mismo")
+        
+    # 2. Candado: Verificamos si el usuario ya dejó una reseña para este profesional
+    resena_existente = db.query(models.Review).filter(
+        models.Review.provider_id == prestador_id,
+        models.Review.client_id == usuario_actual.id
+    ).first()
+    
+    if resena_existente:
+        raise HTTPException(
+            status_code=400, 
+            detail="Ya dejaste una valoración para este profesional. Solo se permite una reseña por cliente."
+        )
         
     nueva_resena = models.Review(
         provider_id=prestador_id,
@@ -509,6 +552,8 @@ def actualizar_mi_perfil(
     prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
     if not prestador:
         raise HTTPException(status_code=404, detail="Perfil no encontrado")
+    if "descripcion" in datos and contiene_malas_palabras(datos["descripcion"]):
+        raise HTTPException(status_code=400, detail="La descripción contiene lenguaje inapropiado. Por favor, modificala.")
     
     prestador.instagram = datos.get("instagram", prestador.instagram)
     prestador.facebook = datos.get("facebook", prestador.facebook)
