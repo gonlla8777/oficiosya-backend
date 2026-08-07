@@ -125,7 +125,6 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 @app.post("/auth/google/")
 def login_google(google_data: dict, db: Session = Depends(get_db)):
     token = google_data.get("token")
-    # Este ID lo vamos a crear en el próximo paso, por ahora lo lee de tu archivo .env
     GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "tu_client_id_aca") 
     
     try:
@@ -134,7 +133,7 @@ def login_google(google_data: dict, db: Session = Depends(get_db)):
         email = idinfo['email']
         nombre = idinfo.get('name', 'Usuario de Google')
         foto = idinfo.get('picture', None)
-        # 2. Buscamos si el usuario ya existe en nuestra base de datos
+        
         # 2. Buscamos si el usuario ya existe
         user = db.query(models.User).filter(models.User.email == email).first()
 
@@ -153,14 +152,13 @@ def login_google(google_data: dict, db: Session = Depends(get_db)):
             user.nombre = nombre
             
             # EL CANDADO: Solo guardamos la foto de Google si NO tenía ninguna foto previa.
-            # Si ya subió una foto propia a Cloudinary, la respetamos.
             if not user.foto_perfil and foto:
                 user.foto_perfil = foto
 
         db.commit()
         db.refresh(user)
 
-        # 4. Le generamos nuestra "pulsera VIP" (el mismo token JWT que usan todos en tu app)
+        # 4. Le generamos nuestra "pulsera VIP"
         access_token = crear_token_acceso(data={"sub": user.email, "id": user.id, "rol": user.rol})
         return {"access_token": access_token, "token_type": "bearer"}
 
@@ -237,9 +235,8 @@ def buscar_prestadores(
         if prestador.destacado:
             score_final += 1000 
 
-        # Construcción manual y robusta del diccionario de salida para evitar fallos de mapeo
         prestador_dict = {
-            "id": prestador.id,  # <--- ¡AGREGÁ ESTA LÍNEA ACÁ!
+            "id": prestador.id,
             "instagram": getattr(prestador, 'instagram', None),
             "facebook": getattr(prestador, 'facebook', None),
             "linkedin": getattr(prestador, 'linkedin', None),
@@ -363,13 +360,11 @@ def obtener_estadisticas_admin(
     if usuario_actual.rol != "admin":
         raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de administrador.")
 
-    # 1. Conteos básicos
     total_usuarios = db.query(models.User).count()
     total_prestadores = db.query(models.Provider).count()
     prestadores_activos = db.query(models.Provider).filter(models.Provider.activo == True).count()
     total_resenas = db.query(models.Review).count()
 
-    # 2. Calcular los oficios más populares (según cuántos profesionales los ofrecen)
     todas_categorias = db.query(models.Category).all()
     todos_prestadores = db.query(models.Provider).all()
     
@@ -378,7 +373,6 @@ def obtener_estadisticas_admin(
         for c in p.categories:
             conteo_categorias[c.nombre] = conteo_categorias.get(c.nombre, 0) + 1
             
-    # Formatear y ordenar de mayor a menor
     top_categorias = [{"nombre": k, "cantidad": v} for k, v in conteo_categorias.items() if v > 0]
     top_categorias.sort(key=lambda x: x["cantidad"], reverse=True)
 
@@ -387,7 +381,7 @@ def obtener_estadisticas_admin(
         "total_prestadores": total_prestadores,
         "prestadores_activos": prestadores_activos,
         "total_resenas": total_resenas,
-        "top_categorias": top_categorias[:5] # Mandamos solo el Top 5
+        "top_categorias": top_categorias[:5]
     }
 
 @app.post("/prestadores/me/portfolio/", response_model=schemas.PortfolioItemOut)
@@ -429,12 +423,30 @@ def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
     if not prestador:
         raise HTTPException(status_code=404, detail="Prestador no encontrado")
 
+    # --- MAGIA PARA LAS FOTOS DE LAS RESEÑAS ---
+    resenas_formateadas = []
+    for r in prestador.reviews:
+        foto_final = None
+        if r.user:
+            foto_final = getattr(r.user, 'foto_perfil', None)
+            if not foto_final:
+                perfil_profesional = db.query(models.Provider).filter(models.Provider.user_id == r.user.id).first()
+                if perfil_profesional and getattr(perfil_profesional, 'foto_perfil', None):
+                    foto_final = perfil_profesional.foto_perfil
+
+        resenas_formateadas.append({
+            "id": r.id,
+            "calidad": r.calidad,
+            "comentario": r.comentario,
+            "fecha": r.fecha.strftime('%d/%m/%Y') if hasattr(r, 'fecha') and hasattr(r.fecha, 'strftime') else str(getattr(r, 'fecha', '')),
+            "nombre_usuario": r.user.nombre if r.user else "Usuario",
+            "foto_usuario": foto_final
+        })
+
     return {
         "id": prestador.id,
         "user_id": prestador.user_id,
-        # MAGIA 1: Le mandamos el nombre desde la tabla de usuarios
         "nombre": prestador.user.nombre, 
-        # MAGIA 2: El truco del "plan B" para la foto
         "foto_perfil": prestador.foto_perfil or prestador.user.foto_perfil, 
         "instagram": getattr(prestador, 'instagram', None),
         "ciudad": prestador.ciudad,
@@ -447,18 +459,7 @@ def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
         "urgencias": getattr(prestador, 'urgencias', False),
         "categorias": [{"id": c.id, "nombre": c.nombre} for c in prestador.categories],
         "portfolio": [{"id": p.id, "url_foto": p.url_foto} for p in prestador.portfolio],
-
-        "reviews": [
-            {
-                "id": r.id,
-                "calidad": r.calidad,
-                "comentario": r.comentario,
-                "fecha": r.fecha.strftime('%d/%m/%Y') if hasattr(r, 'fecha') and hasattr(r.fecha, 'strftime') else str(getattr(r, 'fecha', '')),
-                "nombre_usuario": r.user.nombre if getattr(r, 'user', None) else "Usuario",
-                "foto_usuario": r.user.foto_perfil if getattr(r, 'user', None) else None
-            } for r in prestador.reviews
-        ]
-    
+        "reviews": resenas_formateadas
     }
 
 @app.get("/categorias/")
@@ -474,7 +475,6 @@ def obtener_mi_perfil(
     """Busca si el usuario logueado ya tiene un perfil de trabajador creado"""
     prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
     
-    # 1. SI NO TIENE PERFIL, LE MANDAMOS SUS DATOS DE GOOGLE IGUAL
     if not prestador:
         return {
             "tiene_perfil": False,
@@ -482,11 +482,10 @@ def obtener_mi_perfil(
             "foto_perfil": usuario_actual.foto_perfil
         }
     
-    # 2. SI TIENE PERFIL, MANDAMOS TODO
     return {
         "tiene_perfil": True,
         "id": prestador.id,
-        "nombre": usuario_actual.nombre,  # <--- ¡AGREGÁ ESTA LÍNEA ACÁ!
+        "nombre": usuario_actual.nombre, 
         "ciudad": prestador.ciudad,
         "provincia": prestador.provincia,
         "descripcion": prestador.descripcion,
@@ -538,14 +537,11 @@ async def subir_foto_perfil(
 ):
     """Sube la foto a Cloudinary y la guarda en la cuenta del usuario"""
     try:
-        # 1. Subimos la imagen a Cloudinary
         resultado = cloudinary.uploader.upload(file.file, folder="avatars")
         url_foto = resultado.get("secure_url")
         
-        # 2. Actualizamos la foto en la cuenta base del usuario (¡Para que siempre funcione!)
         usuario_actual.foto_perfil = url_foto
         
-        # 3. Si por casualidad ya tiene su perfil de prestador creado, también se la actualizamos ahí
         prestador = db.query(models.Provider).filter(models.Provider.user_id == usuario_actual.id).first()
         if prestador:
             prestador.foto_perfil = url_foto
@@ -583,16 +579,13 @@ def eliminar_resena(
     usuario_actual: models.User = Depends(obtener_usuario_actual)
 ):
     """Permite a un administrador eliminar una reseña inapropiada"""
-    # 1. Verificamos que sea un admin
     if usuario_actual.rol != "admin":
         raise HTTPException(status_code=403, detail="Acceso denegado. Se requieren permisos de administrador.")
         
-    # 2. Buscamos la reseña
     resena = db.query(models.Review).filter(models.Review.id == resena_id).first()
     if not resena:
         raise HTTPException(status_code=404, detail="Reseña no encontrada")
         
-    # 3. La eliminamos de la base de datos
     db.delete(resena)
     db.commit()
     
