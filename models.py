@@ -78,8 +78,8 @@ class Review(Base):
     trato = Column(Integer) # 1 a 5
     comentario = Column(Text)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
     provider = relationship("Provider", back_populates="reviews")
+    user = relationship("User")
 
 
 class JobRequest(Base):
