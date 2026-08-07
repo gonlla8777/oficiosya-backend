@@ -453,7 +453,9 @@ def ver_detalle_prestador(prestador_id: int, db: Session = Depends(get_db)):
                 "id": r.id,
                 "calidad": r.calidad,
                 "comentario": r.comentario,
-                "fecha": r.fecha.strftime('%d/%m/%Y') if hasattr(r, 'fecha') and hasattr(r.fecha, 'strftime') else str(getattr(r, 'fecha', ''))
+                "fecha": r.fecha.strftime('%d/%m/%Y') if hasattr(r, 'fecha') and hasattr(r.fecha, 'strftime') else str(getattr(r, 'fecha', '')),
+                "nombre_usuario": r.user.nombre if getattr(r, 'user', None) else "Usuario",
+                "foto_usuario": r.user.foto_perfil if getattr(r, 'user', None) else None
             } for r in prestador.reviews
         ]
     
