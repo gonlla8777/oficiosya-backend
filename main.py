@@ -112,7 +112,7 @@ def contiene_malas_palabras(texto: str) -> bool:
 
 @app.get("/")
 def leer_raiz():
-    return {"mensaje": "Backend de OficiosYa funcionando correctamente"}
+    return {"mensaje": "Backend de ChangApp funcionando correctamente"}
 
 @app.post("/usuarios/")
 def crear_usuario(usuario: schemas.UserCreate, db: Session = Depends(get_db)):
